@@ -1,0 +1,50 @@
+{
+  "name": "@seolyticize/node",
+  "version": "0.2.0",
+  "description": "Seolyticize on a Node server: events and AI-agent page views through an in-process queue that retries and never throws, with visit tokens, orderId de-duplication, hooks, a test transport, and Fastify and Express adapters.",
+  "type": "module",
+  "license": "MIT",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./fastify": {
+      "types": "./dist/fastify.d.ts",
+      "default": "./dist/fastify.js"
+    },
+    "./express": {
+      "types": "./dist/express.d.ts",
+      "default": "./dist/express.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "prepare": "npm run build"
+  },
+  "dependencies": {
+    "@seolyticize/sdk": "^0.5.17"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Seolyticize/node.git"
+  },
+  "homepage": "https://github.com/Seolyticize/node#readme",
+  "bugs": {
+    "url": "https://github.com/Seolyticize/node/issues"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "@types/node": "^22.18.13"
+  }
+}
