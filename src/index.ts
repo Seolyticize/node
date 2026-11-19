@@ -4,6 +4,9 @@ import {
   createClient,
   createCollector,
   DEFAULT_COLLECT_URL,
+  majorUnits,
+  stripePurchase,
+  type StripeEventLike,
   type CollectorOptions,
   type LaterEvent,
   type PageView,
@@ -129,13 +132,29 @@ const retryable = (status: number) => status === 0 || status === 429 || status >
 /** Drops that are the visitor's choice, the site's settings or a duplicate, not faults. */
 const quietDrop = /^(gpc|excluded_|outside_|duplicate_order|already_refunded)/;
 
-/** amountMinor in major units, by the currency's own minor-unit digits (JPY 0, USD 2, KWD 3). */
-export function majorUnits(amountMinor: number, currency: string): number {
-  const digits = new Intl.NumberFormat("en", {
-    style: "currency",
-    currency,
-  }).resolvedOptions().maximumFractionDigits;
-  return amountMinor / 10 ** (digits ?? 2);
+export { majorUnits };
+export type { StripeEventLike };
+
+/**
+ * Records a paid Stripe Checkout session (checkout.session.completed, or
+ * async_payment_succeeded) as a Purchase: amount_total in minor units, the
+ * currency as is, orderId the session id, credited to the visit in its
+ * metadata.seolyticize_visit, or sent unattributed (success_url as its page)
+ * without one. False for any other event.
+ */
+export function recordStripeEvent(client: Seolyticize, event: StripeEventLike): boolean {
+  const purchase = stripePurchase(event);
+  if (!purchase) return false;
+  // shortcut: a token that no longer credits (410/404) reaches onError, not an unattributed resend; use the SDK's recordStripeEvent if that matters.
+  client.trackPurchase(
+    {
+      orderId: purchase.orderId,
+      currency: purchase.currency,
+      amountMinor: purchase.amountMinor,
+    },
+    purchase.visit ? { visit: purchase.visit } : { visitor: { url: purchase.url ?? "" } },
+  );
+  return true;
 }
 
 /** Every client with events pending, flushed once when the process would otherwise exit. */
@@ -266,7 +285,20 @@ export function createSeolyticize(options: NodeOptions): Seolyticize {
       }, delay).unref?.();
       return;
     }
-    const said = (answer ?? {}) as { dropped?: string; error?: string };
+    const said = (answer ?? {}) as {
+      dropped?: string;
+      error?: string;
+      credited?: string;
+      unattributed?: string;
+    };
+    if (status === 202 && said.credited === "none") {
+      const why = said.unattributed ?? "unattributed";
+      const error = new Error(
+        `Seolyticize stored the event as unattributed (${why}): it joined no visit.`,
+      );
+      safely(() => options.onError?.(error, item.event));
+      return;
+    }
     if (status === 202 && (!said.dropped || quietDrop.test(said.dropped))) return;
     const error =
       answer instanceof Error

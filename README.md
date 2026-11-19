@@ -73,6 +73,34 @@ It has the same `track`, `trackPurchase`, `trackLater`, `pageview`,
   even from another process. `track("Refund", { orderId })` nets that purchase
   out of goal and conversion values (`value` for a partial refund, in major
   units); a refund of an order never recorded is refused (`422 unknown_order`).
+- **Stripe Checkout.** Put the visit in the session's metadata and hand your
+  verified webhook events to `recordStripeEvent`:
+
+  ```ts
+  import { recordStripeEvent } from "@seolyticize/node";
+  // checkout route
+  const visit = await req.seo.trackForVisit("Checkout");
+  const session = await stripe.checkout.sessions.create({
+    ...params,
+    metadata: visit ? { seolyticize_visit: visit } : {},
+  });
+  // the Stripe webhook you already have
+  recordStripeEvent(app.seo, event);
+  ```
+
+  A paid `checkout.session.completed` (or `async_payment_succeeded`) becomes a
+  `Purchase`: `amount_total` in minor units converted by the currency's own
+  digits, the currency as is, the session id as `orderId`. Without a token it is
+  sent unattributed, with `success_url` as its page. A token that no longer
+  credits (410/404) reaches `onError`; `@seolyticize/sdk`'s `recordStripeEvent`
+  resends it unattributed instead. Refunds are not read from Stripe, and there
+  is no Stripe connector holding a key: this runs in your webhook.
+
+- **Unattributed events.** An event with neither the visitor's address and user
+  agent nor a visit token warns once per process; the server stores it,
+  unattributed (`get_goal_report`'s `(unattributed)` row), and `onError` hears
+  `stored the event as unattributed (no_visitor_context)`. One that joined no
+  recent visit says `no_recent_visit`.
 - **Changed pages.** With `apiKey` (an API key with `spend:incur`) and `clientId`,
   `await seo.urlsChanged({ changed: [...], removed: [...] })` submits the URLs to
   IndexNow through `submit_indexnow` (up to 500 at once; the client's IndexNow key
@@ -80,7 +108,7 @@ It has the same `track`, `trackPurchase`, `trackLater`, `pageview`,
   re-fetch it. Unlike the rest, it rejects when the call fails.
 - **Hooks.** `onSend(event, { status, attempt })` hears every attempt that reached
   the network, for your own request log. `onError(error, event)` hears every
-  event that was dropped or refused. A hook that throws is ignored.
+  event that was dropped, refused or stored unattributed. A hook that throws is ignored.
 - **Testing.** `testTransport()` answers 202 and keeps every body sent:
 
   ```ts
